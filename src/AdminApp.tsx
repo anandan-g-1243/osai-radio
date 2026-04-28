@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ref as dbRef, onValue, set } from 'firebase/database';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from './firebase';
+import { db, firebaseConfigError, storage } from './firebase';
 
 interface Song {
   id: string;
@@ -36,10 +36,28 @@ export function AdminApp() {
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
 
+  if (firebaseConfigError || !db || !storage) {
+    return (
+      <div className="admin-login">
+        <div className="admin-login-card">
+          <h1>🎙️ ஓசை வானொலி</h1>
+          <p>Admin is unavailable</p>
+          <p className="admin-error">
+            {firebaseConfigError ?? 'Firebase services are not configured correctly.'}
+          </p>
+          <p className="admin-hint">Add all Vercel environment variables, then redeploy.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const dbClient = db;
+  const storageClient = storage;
+
   // Load playlist from Firebase
   useEffect(() => {
     if (!authed) return;
-    const unsubscribe = onValue(dbRef(db, PLAYLIST_PATH), (snapshot) => {
+    const unsubscribe = onValue(dbRef(dbClient, PLAYLIST_PATH), (snapshot) => {
       const data = snapshot.val() as Record<string, Song> | null;
       if (data) {
         setPlaylist(Object.values(data));
@@ -53,7 +71,7 @@ export function AdminApp() {
   // Sync broadcast state from Firebase (to show current state)
   useEffect(() => {
     if (!authed) return;
-    const unsubscribe = onValue(dbRef(db, BROADCAST_PATH), (snapshot) => {
+    const unsubscribe = onValue(dbRef(dbClient, BROADCAST_PATH), (snapshot) => {
       const data = snapshot.val() as BroadcastState | null;
       if (data) {
         setIsPlaying(data.isPlaying);
@@ -69,7 +87,7 @@ export function AdminApp() {
   }, [volume]);
 
   const pushBroadcast = async (song: Song, playing: boolean, position: number) => {
-    await set(dbRef(db, BROADCAST_PATH), {
+    await set(dbRef(dbClient, BROADCAST_PATH), {
       isPlaying: playing,
       songUrl: song.url,
       songTitle: song.title,
@@ -84,7 +102,7 @@ export function AdminApp() {
     Array.from(files).forEach((file) => {
       if (!file.type.startsWith('audio/')) return;
       const songId = `song_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      const fileRef = storageRef(storage, `songs/${songId}_${file.name}`);
+      const fileRef = storageRef(storageClient, `songs/${songId}_${file.name}`);
       const task = uploadBytesResumable(fileRef, file);
 
       task.on(
@@ -104,7 +122,7 @@ export function AdminApp() {
           const url = await getDownloadURL(task.snapshot.ref);
           const title = file.name.replace(/\.[^/.]+$/, '');
           const newSong: Song = { id: songId, title, artist: 'Admin Upload', url };
-          await set(dbRef(db, `${PLAYLIST_PATH}/${songId}`), newSong);
+          await set(dbRef(dbClient, `${PLAYLIST_PATH}/${songId}`), newSong);
           setUploadProgress((prev) => {
             const next = { ...prev };
             delete next[file.name];

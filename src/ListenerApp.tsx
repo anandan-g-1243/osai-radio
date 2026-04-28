@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ref as dbRef, onValue } from 'firebase/database';
-import { db } from './firebase';
+import { db, firebaseConfigError } from './firebase';
 
 interface BroadcastState {
   isPlaying: boolean;
@@ -22,9 +22,26 @@ export function ListenerApp() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const lastSongUrl = useRef('');
 
+  if (firebaseConfigError || !db) {
+    return (
+      <div className="page-shell listener-shell">
+        <main className="listener-main">
+          <div className="listener-status-card">
+            <div className="on-air-badge off-air">○ OFF AIR</div>
+            <p className="admin-error">{firebaseConfigError ?? 'Firebase is not configured.'}</p>
+            <p className="listener-hint">Add all environment variables and redeploy.</p>
+            <a href="/" className="ghost-button">Back to Home</a>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  const dbClient = db;
+
   // Subscribe to broadcast state from Firebase
   useEffect(() => {
-    const unsubscribe = onValue(dbRef(db, 'broadcast'), (snapshot) => {
+    const unsubscribe = onValue(dbRef(dbClient, 'broadcast'), (snapshot) => {
       const data = snapshot.val() as BroadcastState | null;
       setIsConnected(true);
       setBroadcast(data);

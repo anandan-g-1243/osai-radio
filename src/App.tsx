@@ -602,6 +602,8 @@ function App() {
             >
               View live show
             </button>
+            <a href="/admin" className="ghost-button">Admin panel</a>
+            <a href="/?listener=true" className="ghost-button">Live listener</a>
           </div>
         </nav>
 
