@@ -622,3 +622,302 @@ h2 {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Admin Panel ──────────────────────────────────────── */
+.admin-login {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f0f0f;
+}
+
+.admin-login-card {
+  background: #1a1a1a;
+  border-radius: 16px;
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+  color: #fff;
+}
+
+.admin-login-card h1 {
+  font-size: 1.8rem;
+  margin-bottom: 0.4rem;
+}
+
+.admin-login-card p {
+  color: #888;
+  margin-bottom: 1.5rem;
+}
+
+.admin-login-card input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #111;
+  color: #fff;
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.admin-login-card button {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: #ff6b6b;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  border: none;
+  cursor: pointer;
+}
+
+.admin-error {
+  color: #ff6b6b;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.admin-shell {
+  min-height: 100vh;
+  background: #0f0f0f;
+  color: #fff;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  background: #1a1a1a;
+  border-bottom: 1px solid #333;
+}
+
+.admin-header h1 {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.admin-body {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.admin-section {
+  background: #1a1a1a;
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.admin-section h2 {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.upload-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: #ccc;
+  margin-top: 0.5rem;
+}
+
+.progress-bar-bg {
+  flex: 1;
+  background: #333;
+  border-radius: 4px;
+  height: 6px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  background: #ff6b6b;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.admin-now-playing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-song-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.admin-song-artist {
+  font-size: 0.85rem;
+  color: #888;
+  margin: 0;
+}
+
+.admin-controls {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.admin-hint {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.admin-playlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: #222;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.admin-playlist-item:hover {
+  background: #2a2a2a;
+}
+
+.admin-playlist-item.active {
+  background: #2d1f1f;
+  border-left: 3px solid #ff6b6b;
+}
+
+.admin-play-icon {
+  color: #ff6b6b;
+  font-size: 0.9rem;
+  min-width: 16px;
+}
+
+/* ── Listener View ──────────────────────────────────────── */
+.listener-shell {
+  min-height: 100vh;
+}
+
+.listener-main {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.listener-status-card {
+  width: 100%;
+  background: #1a1a1a;
+  border-radius: 20px;
+  padding: 2rem;
+  text-align: center;
+  color: #fff;
+}
+
+.on-air-badge {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  padding: 0.3rem 1rem;
+  border-radius: 50px;
+  margin-bottom: 1.5rem;
+}
+
+.on-air-badge.on-air {
+  background: rgba(255, 80, 80, 0.15);
+  color: #ff5050;
+  animation: pulse 2s infinite;
+}
+
+.on-air-badge.off-air {
+  background: rgba(255,255,255,0.05);
+  color: #666;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.listener-now-playing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.listener-disc {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff6b6b, #ff4040);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 0 40px rgba(255,107,107,0.3);
+}
+
+.listener-song-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #fff;
+  margin: 0;
+}
+
+.listener-song-artist {
+  color: #888;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.listener-progress {
+  flex: 1;
+  height: 6px;
+}
+
+.listener-waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 0;
+  color: #888;
+}
+
+.listener-waiting-icon {
+  font-size: 4rem;
+  margin: 0;
+}
+
+.listener-hint {
+  font-size: 0.85rem;
+  color: #999;
+  text-align: center;
+}
+}
