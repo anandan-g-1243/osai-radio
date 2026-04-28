@@ -588,8 +588,8 @@ function App() {
       <header className="hero-card">
         <nav className="topbar">
           <div>
-            <p className="brand-kicker">SKYLINE FM</p>
-            <h1>Live online FM vibes for every part of your day.</h1>
+            <p className="brand-kicker">ஓசைவானொலி</p>
+            <h1>ஓசைவானொலி</h1>
           </div>
           <div className="hero-actions">
             <button type="button" className="primary-button" onClick={tuneIn}>
@@ -608,7 +608,7 @@ function App() {
         <section className="hero-grid">
           <div className="hero-copy">
             <p>
-              Stream Skyline FM directly in your browser with a clean player panel,
+              Stream  FM directly in your browser with a clean player panel,
               live-program preview, and simple schedule filtering.
             </p>
             <div className="stat-grid">

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'osai-fm-v1';
+const CACHE_NAME = 'osai-vanoli-v1';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',

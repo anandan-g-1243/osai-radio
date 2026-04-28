@@ -1,7 +1,7 @@
 {
-  "name": "Ósai FM - Online Radio",
-  "short_name": "Ósai FM",
-  "description": "Stream your music playlist. Upload, shuffle, and enjoy with Ósai FM.",
+  "name": "ஓசை வானொலி - Online Radio",
+  "short_name": "ஓசை வானொலி",
+  "description": "Stream your music playlist. Upload, shuffle, and enjoy with ஓசை வானொலி.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
