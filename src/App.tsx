@@ -1,716 +1,109 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { CartPanel } from './components/CartPanel';
-import { CategoryPill } from './components/CategoryPill';
-import { ProductCard } from './components/ProductCard';
-import { schedule, scheduleFilters, songs as seedSongs, station } from './data/products';
-import type { PlayerState, RepeatMode, ScheduleFilter, ShowSlot, Song } from './types';
+const highlights = [
+  { label: 'Live daily shows', value: '18+' },
+  { label: 'Hours streamed every week', value: '120' },
+  { label: 'Countries listening', value: '9' },
+];
 
-const PLAYLIST_DB_NAME = 'skylinefm-db';
-const PLAYLIST_STORE_NAME = 'playlist-store';
-const PLAYLIST_RECORD_KEY = 'playlist';
-const LEGACY_PLAYLIST_STORAGE_KEY = 'skylinefm-playlist';
-
-const isValidSong = (value: unknown): value is Song => {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const candidate = value as Partial<Song>;
-
-  return (
-    typeof candidate.id === 'number' &&
-    typeof candidate.title === 'string' &&
-    typeof candidate.artist === 'string' &&
-    typeof candidate.url === 'string'
-  );
-};
-
-const getLegacyPlaylistFromLocalStorage = (): Song[] => {
-  try {
-    const raw = window.localStorage.getItem(LEGACY_PLAYLIST_STORAGE_KEY);
-
-    if (!raw) {
-      return seedSongs;
-    }
-
-    const parsed = JSON.parse(raw) as unknown;
-
-    if (!Array.isArray(parsed)) {
-      return seedSongs;
-    }
-
-    const sanitized = parsed.filter(isValidSong);
-
-    return sanitized.length > 0 ? sanitized : seedSongs;
-  } catch {
-    return seedSongs;
-  }
-};
-
-const openPlaylistDatabase = (): Promise<IDBDatabase | null> =>
-  new Promise((resolve) => {
-    if (typeof window === 'undefined' || !('indexedDB' in window)) {
-      resolve(null);
-      return;
-    }
-
-    const request = window.indexedDB.open(PLAYLIST_DB_NAME, 1);
-
-    request.onupgradeneeded = () => {
-      const db = request.result;
-
-      if (!db.objectStoreNames.contains(PLAYLIST_STORE_NAME)) {
-        db.createObjectStore(PLAYLIST_STORE_NAME);
-      }
-    };
-
-    request.onsuccess = () => {
-      resolve(request.result);
-    };
-
-    request.onerror = () => {
-      resolve(null);
-    };
-  });
-
-const readPlaylistFromIndexedDb = async (): Promise<Song[] | null> => {
-  const db = await openPlaylistDatabase();
-
-  if (!db) {
-    return null;
-  }
-
-  try {
-    const songs = await new Promise<Song[] | null>((resolve) => {
-      const transaction = db.transaction(PLAYLIST_STORE_NAME, 'readonly');
-      const store = transaction.objectStore(PLAYLIST_STORE_NAME);
-      const request = store.get(PLAYLIST_RECORD_KEY);
-
-      request.onsuccess = () => {
-        const value = request.result as unknown;
-
-        if (!Array.isArray(value)) {
-          resolve(null);
-          return;
-        }
-
-        const sanitized = value.filter(isValidSong);
-        resolve(sanitized.length > 0 ? sanitized : null);
-      };
-
-      request.onerror = () => {
-        resolve(null);
-      };
-    });
-
-    return songs;
-  } finally {
-    db.close();
-  }
-};
-
-const writePlaylistToIndexedDb = async (playlist: Song[]): Promise<void> => {
-  const db = await openPlaylistDatabase();
-
-  if (!db) {
-    return;
-  }
-
-  try {
-    await new Promise<void>((resolve) => {
-      const transaction = db.transaction(PLAYLIST_STORE_NAME, 'readwrite');
-      const store = transaction.objectStore(PLAYLIST_STORE_NAME);
-      store.put(playlist, PLAYLIST_RECORD_KEY);
-
-      transaction.oncomplete = () => {
-        resolve();
-      };
-
-      transaction.onerror = () => {
-        resolve();
-      };
-    });
-  } finally {
-    db.close();
-  }
-};
-
-const fileToDataUrl = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      resolve(String(reader.result ?? ''));
-    };
-
-    reader.onerror = () => {
-      reject(new Error(`Failed to read ${file.name}`));
-    };
-
-    reader.readAsDataURL(file);
-  });
-
-const stats = [
-  { value: '24/7', label: 'live audio access online' },
-  { value: '12k+', label: 'listeners tuned in this week' },
-  { value: '3', label: 'curated daily live segments' },
+const showBlocks = [
+  {
+    name: 'Sunrise Pulse',
+    time: '06:00 - 09:00',
+    desc: 'Warm melodies, weather, and local voices to start your morning.',
+  },
+  {
+    name: 'City Rhythm',
+    time: '12:00 - 15:00',
+    desc: 'Midday Tamil and international hits with listener requests.',
+  },
+  {
+    name: 'Night Drive',
+    time: '20:00 - 23:00',
+    desc: 'Late-evening calm, stories, and acoustic tracks for long rides.',
+  },
 ];
 
 function App() {
-  const [activeFilter, setActiveFilter] = useState<ScheduleFilter>('All');
-  const [playerState, setPlayerState] = useState<PlayerState>({
-    isPlaying: false,
-    volume: 0.75,
-  });
-  const [playlist, setPlaylist] = useState<Song[]>(seedSongs);
-  const [playlistHydrated, setPlaylistHydrated] = useState(false);
-  const [showUploadView, setShowUploadView] = useState(false);
-  const [currentSongIndex, setCurrentSongIndex] = useState(0);
-  const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
-  const [repeatMode, setRepeatMode] = useState<RepeatMode>('all');
-  const [playbackProgress, setPlaybackProgress] = useState({
-    currentTime: 0,
-    duration: 0,
-  });
-  const audioRef = useRef<HTMLAudioElement>(null);
-
-  const currentSong: Song | null = playlist[currentSongIndex] ?? playlist[0] ?? null;
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const hydratePlaylist = async () => {
-      const indexedDbPlaylist = await readPlaylistFromIndexedDb();
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (indexedDbPlaylist && indexedDbPlaylist.length > 0) {
-        setPlaylist(indexedDbPlaylist);
-        setPlaylistHydrated(true);
-        return;
-      }
-
-      const legacyPlaylist = getLegacyPlaylistFromLocalStorage();
-      setPlaylist(legacyPlaylist);
-      setPlaylistHydrated(true);
-
-      try {
-        window.localStorage.removeItem(LEGACY_PLAYLIST_STORAGE_KEY);
-      } catch {
-        // Ignore local storage cleanup failures.
-      }
-    };
-
-    void hydratePlaylist();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!playlistHydrated) {
-      return;
-    }
-
-    void writePlaylistToIndexedDb(playlist);
-  }, [playlist, playlistHydrated]);
-
-  useEffect(() => {
-    if (playlist.length === 0) {
-      setShowUploadView(true);
-    }
-  }, [playlist.length]);
-
-  const visibleSchedule = useMemo(() => {
-    if (activeFilter === 'All') {
-      return schedule;
-    }
-
-    if (activeFilter === 'Live') {
-      return schedule.filter((show) => show.status === 'Live');
-    }
-
-    return schedule.filter((show) => show.segment === activeFilter);
-  }, [activeFilter]);
-
-  const nowPlaying: ShowSlot = useMemo(
-    () => schedule.find((show) => show.status === 'Live') ?? schedule[0],
-    [],
-  );
-
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = playerState.volume;
-    }
-  }, [playerState.volume]);
-
-  useEffect(() => {
-    if (!audioRef.current || !currentSong) {
-      return;
-    }
-
-    audioRef.current.load();
-
-    if (playerState.isPlaying) {
-      audioRef.current.play().catch(() => {
-        setPlayerState((current) => ({ ...current, isPlaying: false }));
-      });
-    }
-  }, [currentSong, currentSongIndex, playerState.isPlaying]);
-
-  const togglePlay = async () => {
-    if (!audioRef.current || !currentSong) {
-      return;
-    }
-
-    if (playerState.isPlaying) {
-      audioRef.current.pause();
-      setPlayerState((current) => ({ ...current, isPlaying: false }));
-      return;
-    }
-
-    try {
-      await audioRef.current.play();
-      setPlayerState((current) => ({ ...current, isPlaying: true }));
-    } catch {
-      setPlayerState((current) => ({ ...current, isPlaying: false }));
-    }
-  };
-
-  const tuneIn = async () => {
-    if (!currentSong) {
-      return;
-    }
-
-    if (!playerState.isPlaying) {
-      await togglePlay();
-    }
-  };
-
-  const setVolume = (volume: number) => {
-    setPlayerState((current) => ({ ...current, volume }));
-  };
-
-  const getRandomSongIndex = (excludeIndex: number) => {
-    if (playlist.length <= 1) {
-      return excludeIndex;
-    }
-
-    let randomIndex = excludeIndex;
-
-    while (randomIndex === excludeIndex) {
-      randomIndex = Math.floor(Math.random() * playlist.length);
-    }
-
-    return randomIndex;
-  };
-
-  const goToPreviousSong = () => {
-    if (playlist.length === 0) {
-      return;
-    }
-
-    setCurrentSongIndex((current) => {
-      if (isShuffleEnabled) {
-        return getRandomSongIndex(current);
-      }
-
-      return (current - 1 + playlist.length) % playlist.length;
-    });
-  };
-
-  const goToNextSong = () => {
-    if (playlist.length === 0) {
-      return;
-    }
-
-    setCurrentSongIndex((current) => {
-      if (isShuffleEnabled) {
-        return getRandomSongIndex(current);
-      }
-
-      return (current + 1) % playlist.length;
-    });
-  };
-
-  const selectSong = (index: number) => {
-    if (index < 0 || index >= playlist.length) {
-      return;
-    }
-
-    setShowUploadView(false);
-    setCurrentSongIndex(index);
-    setPlaybackProgress({ currentTime: 0, duration: 0 });
-    setPlayerState((current) => ({ ...current, isPlaying: true }));
-  };
-
-  const toggleShuffle = () => {
-    setIsShuffleEnabled((current) => !current);
-  };
-
-  const uploadSongs = async (files: FileList | null) => {
-    if (!files || files.length === 0) {
-      return;
-    }
-
-    const audioFiles = Array.from(files).filter((file) => file.type.startsWith('audio/'));
-
-    if (audioFiles.length === 0) {
-      return;
-    }
-
-    const uploadedSongs = await Promise.all(
-      audioFiles.map(async (file) => {
-        const title = file.name.replace(/\.[^/.]+$/, '') || 'Uploaded Track';
-
-        return {
-          title,
-          artist: 'Local Upload',
-          url: await fileToDataUrl(file),
-        };
-      }),
-    );
-
-    setPlaylist((currentPlaylist) => {
-      const startId = currentPlaylist.length === 0
-        ? 1
-        : Math.max(...currentPlaylist.map((song) => song.id)) + 1;
-
-      const withIds: Song[] = uploadedSongs.map((song, index) => ({
-        ...song,
-        id: startId + index,
-      }));
-
-      return [...currentPlaylist, ...withIds];
-    });
-
-    setShowUploadView(false);
-  };
-
-  const removeSong = (songId: number) => {
-    setPlaylist((currentPlaylist) => {
-      const removedIndex = currentPlaylist.findIndex((song) => song.id === songId);
-
-      if (removedIndex === -1) {
-        return currentPlaylist;
-      }
-
-      const nextPlaylist = currentPlaylist.filter((song) => song.id !== songId);
-
-      setCurrentSongIndex((currentIndex) => {
-        if (nextPlaylist.length === 0) {
-          return 0;
-        }
-
-        if (currentIndex > removedIndex) {
-          return currentIndex - 1;
-        }
-
-        if (currentIndex === removedIndex) {
-          return Math.min(currentIndex, nextPlaylist.length - 1);
-        }
-
-        return currentIndex;
-      });
-
-      if (nextPlaylist.length === 0 && audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        setPlayerState((current) => ({ ...current, isPlaying: false }));
-        setPlaybackProgress({ currentTime: 0, duration: 0 });
-      }
-
-      return nextPlaylist;
-    });
-  };
-
-  const clearPlaylist = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-
-    setPlaylist([]);
-    setShowUploadView(true);
-    setCurrentSongIndex(0);
-    setPlayerState((current) => ({ ...current, isPlaying: false }));
-    setPlaybackProgress({ currentTime: 0, duration: 0 });
-  };
-
-  const cycleRepeatMode = () => {
-    setRepeatMode((current) => {
-      if (current === 'off') {
-        return 'all';
-      }
-
-      if (current === 'all') {
-        return 'one';
-      }
-
-      return 'off';
-    });
-  };
-
-  const updateTimeProgress = () => {
-    if (!audioRef.current) {
-      return;
-    }
-
-    const safeDuration = Number.isFinite(audioRef.current.duration) ? audioRef.current.duration : 0;
-
-    setPlaybackProgress({
-      currentTime: audioRef.current.currentTime,
-      duration: safeDuration,
-    });
-  };
-
-  const seekToTime = (timeInSeconds: number) => {
-    if (!audioRef.current) {
-      return;
-    }
-
-    audioRef.current.currentTime = timeInSeconds;
-    setPlaybackProgress((current) => ({
-      ...current,
-      currentTime: timeInSeconds,
-    }));
-  };
-
-  const syncPlay = () => {
-    setPlayerState((current) => ({ ...current, isPlaying: true }));
-  };
-
-  const syncPause = () => {
-    setPlayerState((current) => ({ ...current, isPlaying: false }));
-  };
-
-  const handleSongEnded = () => {
-    if (playlist.length === 0) {
-      setPlayerState((current) => ({ ...current, isPlaying: false }));
-      return;
-    }
-
-    if (repeatMode === 'one' && audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(() => {
-        setPlayerState((current) => ({ ...current, isPlaying: false }));
-      });
-      return;
-    }
-
-    const isLastSong = currentSongIndex === playlist.length - 1;
-
-    if (!isShuffleEnabled && repeatMode === 'off' && isLastSong) {
-      setPlayerState((current) => ({ ...current, isPlaying: false }));
-      return;
-    }
-
-    setPlayerState((current) => ({ ...current, isPlaying: true }));
-
-    if (isShuffleEnabled) {
-      setCurrentSongIndex((current) => getRandomSongIndex(current));
-      return;
-    }
-
-    if (isLastSong) {
-      setCurrentSongIndex(0);
-      return;
-    }
-
-    setCurrentSongIndex((current) => current + 1);
-  };
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target;
-      const isTypingTarget =
-        target instanceof HTMLElement &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable);
-
-      if (isTypingTarget) {
-        return;
-      }
-
-      if (event.code === 'Space') {
-        event.preventDefault();
-        void togglePlay();
-        return;
-      }
-
-      if (event.code === 'ArrowRight') {
-        event.preventDefault();
-        const nextTime = Math.min(playbackProgress.currentTime + 10, playbackProgress.duration || 0);
-        seekToTime(nextTime);
-        return;
-      }
-
-      if (event.code === 'ArrowLeft') {
-        event.preventDefault();
-        const nextTime = Math.max(playbackProgress.currentTime - 10, 0);
-        seekToTime(nextTime);
-        return;
-      }
-
-      if (event.code === 'KeyN') {
-        event.preventDefault();
-        goToNextSong();
-        return;
-      }
-
-      if (event.code === 'KeyP') {
-        event.preventDefault();
-        goToPreviousSong();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [
-    goToNextSong,
-    goToPreviousSong,
-    playbackProgress.currentTime,
-    playbackProgress.duration,
-    seekToTime,
-    togglePlay,
-  ]);
-
   return (
-    <div className="page-shell">
-      <header className="hero-card">
-        <nav className="topbar">
-          <div>
-            <p className="brand-kicker">ஓசைவானொலி</p>
-            <h1>ஓசைவானொலி</h1>
-          </div>
-          <div className="hero-actions">
-            <button type="button" className="primary-button" onClick={tuneIn}>
-              Tune now
-            </button>
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => setActiveFilter('Live')}
-            >
-              View live show
-            </button>
-            <a href="/admin" className="ghost-button">Admin panel</a>
-            <a href="/?listener=true" className="ghost-button">Live listener</a>
+    <div className="site-wrap">
+      <header className="site-hero">
+        <nav className="site-nav">
+          <p className="site-logo">OSAI RADIO</p>
+          <div className="site-links">
+            <a href="#shows">Shows</a>
+            <a href="#about">About</a>
+            <a href="/?listener=true" className="site-link-pill">
+              Listen live
+            </a>
           </div>
         </nav>
 
-        <section className="hero-grid">
-          <div className="hero-copy">
+        <div className="site-hero-grid">
+          <div className="site-copy">
+            <p className="site-kicker">Digital Tamil FM</p>
+            <h1>One station. One live stream. Anywhere.</h1>
             <p>
-              Stream  FM directly in your browser with a clean player panel,
-              live-program preview, and simple schedule filtering.
+              OSAI is your online FM experience with real-time broadcasting. Open the listener
+              mode to join the live stream, or use the admin panel to run your station.
             </p>
-            <div className="stat-grid">
-              {stats.map((stat) => (
-                <div className="stat-card" key={stat.label}>
-                  <strong>{stat.value}</strong>
-                  <span>{stat.label}</span>
-                </div>
-              ))}
+            <div className="site-cta-row">
+              <a href="/?listener=true" className="site-cta-primary">
+                Open Listener
+              </a>
+              <a href="/admin" className="site-cta-secondary">
+                Open Admin Studio
+              </a>
             </div>
           </div>
 
-          <div className="hero-highlight">
-            <p className="eyebrow">Current broadcast</p>
-            <h2>{nowPlaying.title}</h2>
-            <p>
-              Hosted by {nowPlaying.host} from {nowPlaying.startTime} to {nowPlaying.endTime}.
-              {` `}
-              {nowPlaying.summary}
-            </p>
+          <div className="site-stage-card">
+            <p>NOW ON AIR</p>
+            <h2>City Rhythm</h2>
+            <span>Hosted by RJ Nila</span>
+            <div className="site-pulse" aria-hidden="true" />
           </div>
-        </section>
+        </div>
       </header>
 
-      <main className="content-grid">
-        <section className="catalog-section">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Station profile</p>
-              <h2>Stay tuned from {station.location} on {station.frequency}.</h2>
-            </div>
-            <div className="pill-row">
-              {scheduleFilters.map((filter) => (
-                <CategoryPill
-                  key={filter}
-                  label={filter}
-                  active={filter === activeFilter}
-                  onClick={() => setActiveFilter(filter)}
-                />
-              ))}
-            </div>
-          </div>
+      <main className="site-main">
+        <section className="site-stats" aria-label="Station highlights">
+          {highlights.map((item) => (
+            <article className="site-stat" key={item.label}>
+              <strong>{item.value}</strong>
+              <p>{item.label}</p>
+            </article>
+          ))}
+        </section>
 
-          <div className="product-grid">
-            <ProductCard station={station} isPlaying={playerState.isPlaying} onTune={tuneIn} />
+        <section className="site-shows" id="shows">
+          <div>
+            <p className="site-kicker">Daily lineup</p>
+            <h2>Programs designed for every mood</h2>
           </div>
-
-          <div className="schedule-list">
-            {visibleSchedule.length === 0 ? (
-              <div className="schedule-item">
-                <strong>No shows in this filter.</strong>
-                <p>Switch to another filter to see upcoming programs.</p>
-              </div>
-            ) : (
-              visibleSchedule.map((show) => (
-                <article className="schedule-item" key={show.id}>
-                  <div>
-                    <p className="eyebrow">{show.status}</p>
-                    <h3>{show.title}</h3>
-                  </div>
-                  <p>
-                    {show.host} · {show.startTime} - {show.endTime}
-                  </p>
-                  <p>{show.summary}</p>
-                </article>
-              ))
-            )}
+          <div className="site-show-grid">
+            {showBlocks.map((show) => (
+              <article className="site-show-card" key={show.name}>
+                <p>{show.time}</p>
+                <h3>{show.name}</h3>
+                <span>{show.desc}</span>
+              </article>
+            ))}
           </div>
         </section>
 
-        <CartPanel
-          station={station}
-          nowPlaying={nowPlaying}
-          playerState={playerState}
-          currentSong={currentSong}
-          songs={playlist}
-          showUploadView={showUploadView}
-          currentSongIndex={currentSongIndex}
-          isShuffleEnabled={isShuffleEnabled}
-          repeatMode={repeatMode}
-          currentTime={playbackProgress.currentTime}
-          duration={playbackProgress.duration}
-          audioRef={audioRef}
-          onTogglePlay={togglePlay}
-          onVolumeChange={setVolume}
-          onPreviousSong={goToPreviousSong}
-          onNextSong={goToNextSong}
-          onSelectSong={selectSong}
-          onToggleShuffle={toggleShuffle}
-          onCycleRepeatMode={cycleRepeatMode}
-          onSeek={seekToTime}
-          onUploadSongs={uploadSongs}
-          onRemoveSong={removeSong}
-          onClearPlaylist={clearPlaylist}
-          onNativePlay={syncPlay}
-          onNativePause={syncPause}
-          onTimeUpdate={updateTimeProgress}
-          onLoadedMetadata={updateTimeProgress}
-          onEnded={handleSongEnded}
-        />
+        <section className="site-about" id="about">
+          <div>
+            <p className="site-kicker">About the station</p>
+            <h2>Built for live radio teams and community listeners</h2>
+            <p>
+              Your studio can upload tracks, schedule playback, and broadcast in sync to all
+              listeners. This website is connected to the same real-time system powering your
+              admin and listener routes.
+            </p>
+          </div>
+          <a href="/?listener=true" className="site-cta-primary">
+            Start listening now
+          </a>
+        </section>
       </main>
     </div>
   );
