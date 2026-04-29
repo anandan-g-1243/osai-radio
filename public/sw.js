@@ -1,9 +1,5 @@
-const CACHE_NAME = 'osai-vanoli-v1';
-const URLS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json'
-];
+const CACHE_NAME = 'osai-vanoli-v2';
+const URLS_TO_CACHE = ['/manifest.json', '/favicon.svg', '/apple-touch-icon.svg'];
 
 // Install event - cache assets
 self.addEventListener('install', event => {
@@ -33,38 +29,60 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - network-first for HTML to avoid stale app shell, cache-first for static assets
 self.addEventListener('fetch', event => {
-  // Skip non-GET requests
   if (event.request.method !== 'GET') {
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then(response => {
-      if (response) {
-        return response;
-      }
+  const requestUrl = new URL(event.request.url);
+  const isNavigationRequest = event.request.mode === 'navigate';
+  const isStaticAsset = requestUrl.pathname.startsWith('/assets/');
 
-      return fetch(event.request)
+  if (isNavigationRequest) {
+    event.respondWith(
+      fetch(event.request)
         .then(response => {
-          // Don't cache if not a success response
-          if (!response || response.status !== 200 || response.type !== 'basic') {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put('/index.html', responseToCache);
+          });
+
+          return response;
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+          return (await cache.match('/index.html')) || (await cache.match('/'));
+        })
+    );
+    return;
+  }
+
+  if (isStaticAsset) {
+    event.respondWith(
+      caches.match(event.request).then(cached => {
+        if (cached) {
+          return cached;
+        }
+
+        return fetch(event.request).then(response => {
+          if (!response || response.status !== 200) {
             return response;
           }
 
-          // Clone the response for caching
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then(cache => {
             cache.put(event.request, responseToCache);
           });
 
           return response;
-        })
-        .catch(() => {
-          // Return offline page or cached response
-          return caches.match('/');
         });
-    })
+      })
+    );
+    return;
+  }
+
+  event.respondWith(
+    fetch(event.request).catch(() => caches.match(event.request))
   );
 });
